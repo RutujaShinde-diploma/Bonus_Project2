@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LM Agent POC - Test Page</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .result { margin: 10px 0; padding: 10px; background: #f0f0f0; border-radius: 3px; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+        input { padding: 8px; margin: 5px; width: 300px; }
+    </style>
+</head>
+<body>
+    <h1>LM Agent POC - Test Page</h1>
+    <p>This page tests the individual tool functions without the full agent interface.</p>
+
+    <!-- Google Search Test -->
+    <div class="test-section">
+        <h3>🔍 Google Search Test</h3>
+        <input type="text" id="searchQuery" placeholder="Enter search query" value="artificial intelligence">
+        <button onclick="testSearch()">Test Search</button>
+        <div id="searchResult" class="result"></div>
+    </div>
+
+    <!-- AI Pipe Test -->
+    <div class="test-section">
+        <h3>🤖 AI Pipe Test</h3>
+        <input type="text" id="aiData" placeholder="Enter data to analyze" value="The weather is sunny today">
+        <button onclick="testAIPipe()">Test AI Pipe</button>
+        <div id="aiResult" class="result"></div>
+    </div>
+
+    <!-- JavaScript Execution Test -->
+    <div class="test-section">
+        <h3>💻 JavaScript Execution Test</h3>
+        <input type="text" id="jsCode" placeholder="Enter JavaScript code" value="return 2 + 2;">
+        <button onclick="testJSExecution()">Test JS Execution</button>
+        <div id="jsResult" class="result"></div>
+    </div>
+
+    <!-- Agent Loop Test -->
+    <div class="test-section">
+        <h3>🔄 Agent Loop Test</h3>
+        <input type="text" id="agentInput" placeholder="Enter message for agent" value="Search for information about machine learning">
+        <button onclick="testAgentLoop()">Test Agent Loop</button>
+        <div id="agentResult" class="result"></div>
+    </div>
+
+    <script>
+        // Import the agent logic
+        class LMAgent {
+            constructor() {
+                this.conversation = [];
+                this.tools = [
+                    {
+                        type: "function",
+                        function: {
+                            name: "google_search",
+                            description: "Search Google for current information",
+                            parameters: {
+                                type: "object",
+                                properties: {
+                                    query: {
+                                        type: "string",
+                                        description: "Search query"
+                                    }
+                                },
+                                required: ["query"]
+                            }
+                        }
+                    },
+                    {
+                        type: "function",
+                        function: {
+                            name: "ai_pipe",
+                            description: "Use AI Pipe API for data processing",
+                            parameters: {
+                                type: "object",
+                                properties: {
+                                    operation: {
+                                        type: "string",
+                                        description: "Operation to perform (analyze, summarize, etc.)"
+                                    },
+                                    data: {
+                                        type: "string",
+                                        description: "Data to process"
+                                    }
+                                },
+                                required: ["operation", "data"]
+                            }
+                        }
+                    },
+                    {
+                        type: "function",
+                        function: {
+                            name: "execute_js",
+                            description: "Execute JavaScript code safely in the browser",
+                            parameters: {
+                                type: "object",
+                                properties: {
+                                    code: {
+                                        type: "string",
+                                        description: "JavaScript code to execute"
+                                    }
+                                },
+                                required: ["code"]
+                            }
+                        }
+                    }
+                ];
+            }
+
+            async loop(userInput) {
+                this.conversation.push({ role: "user", content: userInput });
+                let result = "";
+                
+                while (true) {
+                    try {
+                        const response = await this.mockLLMResponse(this.conversation, this.tools);
+                        result += `Agent: ${response.content}\n`;
+                        
+                        if (response.tool_calls && response.tool_calls.length > 0) {
+                            for (const toolCall of response.tool_calls) {
+                                const toolResult = await this.handleToolCall(toolCall);
+                                result += `Tool Result: ${toolResult}\n`;
+                            }
+                        } else {
+                            break;
+                        }
+                    } catch (error) {
+                        result += `Error: ${error.message}\n`;
+                        break;
+                    }
+                }
+                
+                return result;
+            }
+
+            async mockLLMResponse(messages, tools) {
+                const lastMessage = messages[messages.length - 1];
+                const content = lastMessage.content.toLowerCase();
+                
+                if (content.includes('search') || content.includes('find') || content.includes('look up')) {
+                    const query = content.replace(/search|find|look up/gi, '').trim();
+                    return {
+                        content: `I'll search for information about "${query}".`,
+                        tool_calls: [{
+                            id: "search_" + Date.now(),
+                            type: "function",
+                            function: {
+                                name: "google_search",
+                                arguments: JSON.stringify({ query: query })
+                            }
+                        }]
+                    };
+                } else if (content.includes('analyze') || content.includes('process')) {
+                    return {
+                        content: "I'll analyze this data using the AI Pipe API.",
+                        tool_calls: [{
+                            id: "ai_" + Date.now(),
+                            type: "function",
+                            function: {
+                                name: "ai_pipe",
+                                arguments: JSON.stringify({ 
+                                    operation: "analyze", 
+                                    data: lastMessage.content 
+                                })
+                            }
+                        }]
+                    };
+                } else if (content.includes('calculate') || content.includes('compute') || content.includes('run')) {
+                    return {
+                        content: "I'll execute some JavaScript code to help with this.",
+                        tool_calls: [{
+                            id: "js_" + Date.now(),
+                            type: "function",
+                            function: {
+                                name: "execute_js",
+                                arguments: JSON.stringify({ 
+                                    code: "console.log('Hello from JS execution'); return 'Code executed successfully';" 
+                                })
+                            }
+                        }]
+                    };
+                } else {
+                    return {
+                        content: "I understand. How can I help you further?",
+                        tool_calls: []
+                    };
+                }
+            }
+
+            async handleToolCall(toolCall) {
+                const functionName = toolCall.function.name;
+                const arguments = JSON.parse(toolCall.function.arguments);
+                
+                try {
+                    let result;
+                    
+                    switch (functionName) {
+                        case "google_search":
+                            result = await this.googleSearch(arguments.query);
+                            break;
+                        case "ai_pipe":
+                            result = await this.aiPipe(arguments.operation, arguments.data);
+                            break;
+                        case "execute_js":
+                            result = await this.executeJS(arguments.code);
+                            break;
+                        default:
+                            result = `Unknown tool: ${functionName}`;
+                    }
+                    
+                    return result;
+                } catch (error) {
+                    return `Tool execution error: ${error.message}`;
+                }
+            }
+
+            async googleSearch(query) {
+                try {
+                    const response = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`);
+                    const data = await response.json();
+                    
+                    if (data.Abstract) {
+                        return `Search results for "${query}": ${data.Abstract}`;
+                    } else if (data.RelatedTopics && data.RelatedTopics.length > 0) {
+                        return `Search results for "${query}": ${data.RelatedTopics[0].Text}`;
+                    } else {
+                        return `No specific results found for "${query}", but you can try a more specific search term.`;
+                    }
+                } catch (error) {
+                    return `Search error: ${error.message}. You can try searching manually at duckduckgo.com`;
+                }
+            }
+
+            async aiPipe(operation, data) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                switch (operation) {
+                    case "analyze":
+                        return `AI Analysis Result: Processed "${data.substring(0, 50)}..." with sentiment analysis and key insights.`;
+                    case "summarize":
+                        return `AI Summary: "${data.substring(0, 30)}..." - Key points extracted and condensed.`;
+                    default:
+                        return `AI Pipe processed "${operation}" operation on the provided data.`;
+                }
+            }
+
+            async executeJS(code) {
+                try {
+                    const safeEval = new Function('return (function() { ' + code + ' })()');
+                    const result = safeEval();
+                    
+                    if (result !== undefined) {
+                        return `Code executed successfully. Result: ${JSON.stringify(result)}`;
+                    } else {
+                        return "Code executed successfully (no return value).";
+                    }
+                } catch (error) {
+                    return `JavaScript execution error: ${error.message}`;
+                }
+            }
+        }
+
+        const agent = new LMAgent();
+
+        // Test functions
+        async function testSearch() {
+            const query = document.getElementById('searchQuery').value;
+            const result = await agent.googleSearch(query);
+            document.getElementById('searchResult').textContent = result;
+        }
+
+        async function testAIPipe() {
+            const data = document.getElementById('aiData').value;
+            const result = await agent.aiPipe('analyze', data);
+            document.getElementById('aiResult').textContent = result;
+        }
+
+        async function testJSExecution() {
+            const code = document.getElementById('jsCode').value;
+            const result = await agent.executeJS(code);
+            document.getElementById('jsResult').textContent = result;
+        }
+
+        async function testAgentLoop() {
+            const input = document.getElementById('agentInput').value;
+            const result = await agent.loop(input);
+            document.getElementById('agentResult').textContent = result;
+        }
+    </script>
+</body>
+</html>
